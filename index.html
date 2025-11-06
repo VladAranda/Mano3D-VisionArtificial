@@ -3,161 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🖐 Mano 3D con MediaPipe + Three.js</title>
-  <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: #000;
-      color: #fff;
-      font-family: Arial, sans-serif;
-    }
-
-    #info {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      background: rgba(0, 0, 0, 0.6);
-      color: #fff;
-      padding: 10px 14px;
-      border-radius: 10px;
-      font-size: 14px;
-      z-index: 10;
-    }
-
-    #output_canvas {
-      position: fixed;
-      bottom: 10px;
-      right: 10px;
-      width: 320px;
-      height: 240px;
-      border: 2px solid #fff;
-      border-radius: 10px;
-      opacity: 0.9;
-      z-index: 2;
-    }
-  </style>
+  <title>Mano 3D con Seguimiento en Vivo</title>
+  <link rel="icon" href="favicon.ico" />
+  <link rel="stylesheet" href="./assets/styles/style.css" />
 </head>
-
 <body>
-  <div id="info">
-    🖐 Mano 3D con seguimiento MediaPipe<br />
-    <small>Modelo: rigged_hand.glb</small>
-  </div>
+  <h1>🖐 Mano 3D - Visión Artificial</h1>
+  <video id="webcam" autoplay playsinline style="display:none"></video>
+  <canvas id="output" width="640" height="480"></canvas>
 
-  <canvas id="output_canvas" width="320" height="240"></canvas>
-
-  <!-- === Script principal === -->
   <script type="module">
-    // ✅ Importaciones desde CDN — no usa "three" local
-    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
-    import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
-    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+    // ✅ Importar desde CDN (sin errores de ruta)
+    import * as THREE from "https://unpkg.com/three@0.158.0/build/three.module.js";
+    import { GLTFLoader } from "https://unpkg.com/three@0.158.0/examples/jsm/loaders/GLTFLoader.js";
 
-    import {
-      Hands,
-      HAND_CONNECTIONS,
-      drawConnectors,
-      drawLandmarks
-    } from "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js";
-
-    import { Camera } from "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js";
-
-    // === Escena Three.js ===
+    // === Escena básica ===
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x111111);
+    const camera = new THREE.PerspectiveCamera(45, 640 / 480, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("output"), alpha: true });
+    renderer.setSize(640, 480);
 
-    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
-    camera.position.set(0, 1, 4);
+    // Luz
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(0, 2, 3);
+    scene.add(light);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(innerWidth, innerHeight);
-    renderer.outputEncoding = THREE.sRGBEncoding;
-    document.body.appendChild(renderer.domElement);
-
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-
-    // === Luces ===
-    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    dirLight.position.set(3, 3, 5);
-    scene.add(dirLight);
-
-    // === Cargar modelo ===
-    let hand, bones = {}, basePose = {};
+    // === Cargar modelo de mano ===
     const loader = new GLTFLoader();
+    loader.load(
+      "./assets/models/rigged_hand.glb",
+      (gltf) => {
+        const hand = gltf.scene;
+        hand.scale.set(2, 2, 2);
+        hand.position.set(0, -1, 0);
+        scene.add(hand);
 
-    loader.load("./assets/models/rigged_hand.glb", (gltf) => {
-      hand = gltf.scene;
-      hand.scale.set(10, 10, 10);
-      hand.position.set(0, -1, 0);
-      hand.rotation.set(-Math.PI / 2, 0, Math.PI);
-      hand.traverse((o) => {
-        if (o.isBone) {
-          bones[o.name] = o;
-          basePose[o.name] = o.quaternion.clone();
+        // Animar
+        function animate() {
+          requestAnimationFrame(animate);
+          hand.rotation.y += 0.01;
+          renderer.render(scene, camera);
         }
-      });
-      scene.add(hand);
-      console.log("✅ Modelo cargado y huesos detectados:", Object.keys(bones));
-    });
-
-    // === Video + MediaPipe ===
-    const video = document.createElement("video");
-    video.style.display = "none";
-    document.body.appendChild(video);
-
-    const canvasElement = document.getElementById("output_canvas");
-    const canvasCtx = canvasElement.getContext("2d");
-
-    const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-    });
-    hands.setOptions({
-      maxNumHands: 1,
-      minDetectionConfidence: 0.7,
-      minTrackingConfidence: 0.7,
-    });
-    hands.onResults(onResults);
-
-    const cam = new Camera(video, {
-      onFrame: async () => {
-        await hands.send({ image: video });
+        animate();
       },
-      width: 640,
-      height: 480,
-    });
-    cam.start();
+      undefined,
+      (error) => console.error("❌ Error cargando modelo:", error)
+    );
 
-    function onResults(results) {
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-      if (results.multiHandLandmarks && hand) {
-        for (const landmarks of results.multiHandLandmarks) {
-          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: "#00FFAA", lineWidth: 2 });
-          drawLandmarks(canvasCtx, landmarks, { color: "#FF0066", lineWidth: 1 });
-        }
-      }
-
-      canvasCtx.restore();
-    }
-
-    function animate() {
-      requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    window.addEventListener("resize", () => {
-      camera.aspect = innerWidth / innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(innerWidth, innerHeight);
-    });
+    camera.position.z = 4;
   </script>
 </body>
 </html>
