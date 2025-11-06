@@ -3,28 +3,54 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>🖐 Mano 3D con Seguimiento en Vivo</title>
+  <title>🖐 Mano 3D con MediaPipe + Three.js</title>
+  <link rel="icon" type="image/x-icon" href="favicon.ico" />
   <style>
-    body { margin: 0; overflow: hidden; background: #000; }
-    #info {
-      position: fixed; top: 10px; left: 10px;
-      background: rgba(0,0,0,0.6); color: #fff;
-      padding: 10px 14px; font-family: Arial, sans-serif;
-      border-radius: 10px; font-size: 14px;
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      color: #fff;
+      font-family: Arial, sans-serif;
     }
+
+    #info {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 14px;
+      z-index: 10;
+    }
+
     #output_canvas {
-      position: fixed; bottom: 10px; right: 10px;
-      width: 320px; height: 240px;
-      border: 2px solid #fff; border-radius: 10px;
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      width: 320px;
+      height: 240px;
+      border: 2px solid #fff;
+      border-radius: 10px;
       opacity: 0.9;
+      z-index: 2;
     }
   </style>
 </head>
+
 <body>
-  <div id="info">🖐 Mano 3D controlada con MediaPipe + Three.js</div>
+  <div id="info">
+    🖐 Mano 3D con seguimiento MediaPipe<br />
+    <small>Modelo: rigged_hand.glb</small>
+  </div>
+
   <canvas id="output_canvas" width="320" height="240"></canvas>
 
+  <!-- === Script principal === -->
   <script type="module">
+    // === Importaciones desde CDN ===
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
     import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
     import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js";
@@ -36,9 +62,9 @@
     } from "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js";
     import { Camera } from "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js";
 
-    // === Escena ===
+    // === Escena Three.js ===
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x202020);
+    scene.background = new THREE.Color(0x101010);
 
     const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
     camera.position.set(0, 1, 4);
@@ -53,15 +79,19 @@
 
     // === Luces ===
     scene.add(new THREE.AmbientLight(0xffffff, 0.8));
-    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.8);
     dirLight.position.set(2, 3, 4);
     scene.add(dirLight);
 
-    // === Cargar modelo de la mano ===
-    const loader = new GLTFLoader();
-    let hand, bones = {}, basePose = {};
+    const backLight = new THREE.PointLight(0x44aaff, 0.5);
+    backLight.position.set(-3, 2, -2);
+    scene.add(backLight);
 
-    loader.load("./assets/rigged_hand.glb", (gltf) => {
+    // === Cargar modelo ===
+    let hand, bones = {}, basePose = {};
+    const loader = new GLTFLoader();
+
+    loader.load("./assets/models/rigged_hand.glb", (gltf) => {
       hand = gltf.scene;
       hand.scale.set(10, 10, 10);
       hand.position.set(0, -1, 0);
@@ -73,9 +103,10 @@
         }
       });
       scene.add(hand);
+      console.log("🦴 Huesos detectados:", Object.keys(bones));
     });
 
-    // === MediaPipe Hands ===
+    // === Video y MediaPipe ===
     const video = document.createElement("video");
     video.style.display = "none";
     document.body.appendChild(video);
@@ -84,22 +115,23 @@
     const canvasCtx = canvasElement.getContext("2d");
 
     const hands = new Hands({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+      locateFile: (file) =>
+        `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
     });
-
     hands.setOptions({
       maxNumHands: 1,
       minDetectionConfidence: 0.7,
       minTrackingConfidence: 0.7,
     });
-
     hands.onResults(onResults);
 
     const cam = new Camera(video, {
-      onFrame: async () => { await hands.send({ image: video }); },
-      width: 640, height: 480,
+      onFrame: async () => {
+        await hands.send({ image: video });
+      },
+      width: 640,
+      height: 480,
     });
-
     cam.start();
 
     function onResults(results) {
@@ -111,6 +143,31 @@
         for (const landmarks of results.multiHandLandmarks) {
           drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: "#00FFAA", lineWidth: 2 });
           drawLandmarks(canvasCtx, landmarks, { color: "#FF0066", lineWidth: 1 });
+
+          const pairs = [
+            ['thumb000', 1, 2], ['thumb001', 2, 3], ['thumb002', 3, 4],
+            ['index000', 5, 6], ['index001', 6, 7], ['index002', 7, 8],
+            ['middle000', 9, 10], ['middle001', 10, 11], ['middle002', 11, 12],
+            ['ring000', 13, 14], ['ring001', 14, 15], ['ring002', 15, 16],
+            ['pinky000', 17, 18], ['pinky001', 18, 19], ['pinky002', 19, 20]
+          ];
+
+          const ref = new THREE.Vector3(0, 0, 1);
+          for (const [name, a, b] of pairs) {
+            const bone = bones[name];
+            if (!bone || !landmarks[a] || !landmarks[b]) continue;
+
+            const pA = new THREE.Vector3(landmarks[a].x, -landmarks[a].y, landmarks[a].z);
+            const pB = new THREE.Vector3(landmarks[b].x, -landmarks[b].y, landmarks[b].z);
+
+            const dir = new THREE.Vector3().subVectors(pB, pA).normalize();
+            const qBaseToDir = new THREE.Quaternion().setFromUnitVectors(ref, dir);
+            const corrective = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
+            qBaseToDir.multiply(corrective);
+
+            const baseQ = basePose[name] || bone.quaternion.clone();
+            bone.quaternion.slerp(baseQ.clone().multiply(qBaseToDir), 0.3);
+          }
         }
       }
 
@@ -132,4 +189,7 @@
   </script>
 </body>
 </html>
+
+
+
 
