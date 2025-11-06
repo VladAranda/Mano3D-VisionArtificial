@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🖐 Mano 3D con Seguimiento en Vivo</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #000; }
+    #info {
+      position: fixed; top: 10px; left: 10px;
+      background: rgba(0,0,0,0.6); color: #fff;
+      padding: 10px 14px; font-family: Arial, sans-serif;
+      border-radius: 10px; font-size: 14px;
+    }
+    #output_canvas {
+      position: fixed; bottom: 10px; right: 10px;
+      width: 320px; height: 240px;
+      border: 2px solid #fff; border-radius: 10px;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">🖐 Mano 3D controlada con MediaPipe + Three.js</div>
+  <canvas id="output_canvas" width="320" height="240"></canvas>
+
+  <script type="module">
+    import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js";
+    import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/GLTFLoader.js";
+    import { OrbitControls } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/controls/OrbitControls.js";
+    import {
+      Hands,
+      HAND_CONNECTIONS,
+      drawConnectors,
+      drawLandmarks,
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js";
+    import { Camera } from "https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js";
+
+    // === Escena ===
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x202020);
+
+    const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 100);
+    camera.position.set(0, 1, 4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputEncoding = THREE.sRGBEncoding;
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    // === Luces ===
+    scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+    dirLight.position.set(2, 3, 4);
+    scene.add(dirLight);
+
+    // === Cargar modelo de la mano ===
+    const loader = new GLTFLoader();
+    let hand, bones = {}, basePose = {};
+
+    loader.load("./assets/rigged_hand.glb", (gltf) => {
+      hand = gltf.scene;
+      hand.scale.set(10, 10, 10);
+      hand.position.set(0, -1, 0);
+      hand.rotation.set(-Math.PI / 2, 0, Math.PI);
+      hand.traverse((o) => {
+        if (o.isBone) {
+          bones[o.name] = o;
+          basePose[o.name] = o.quaternion.clone();
+        }
+      });
+      scene.add(hand);
+    });
+
+    // === MediaPipe Hands ===
+    const video = document.createElement("video");
+    video.style.display = "none";
+    document.body.appendChild(video);
+
+    const canvasElement = document.getElementById("output_canvas");
+    const canvasCtx = canvasElement.getContext("2d");
+
+    const hands = new Hands({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
+    });
+
+    hands.setOptions({
+      maxNumHands: 1,
+      minDetectionConfidence: 0.7,
+      minTrackingConfidence: 0.7,
+    });
+
+    hands.onResults(onResults);
+
+    const cam = new Camera(video, {
+      onFrame: async () => { await hands.send({ image: video }); },
+      width: 640, height: 480,
+    });
+
+    cam.start();
+
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.multiHandLandmarks && hand) {
+        for (const landmarks of results.multiHandLandmarks) {
+          drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, { color: "#00FFAA", lineWidth: 2 });
+          drawLandmarks(canvasCtx, landmarks, { color: "#FF0066", lineWidth: 1 });
+        }
+      }
+
+      canvasCtx.restore();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
+

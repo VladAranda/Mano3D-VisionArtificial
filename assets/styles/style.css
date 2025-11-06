@@ -1,0 +1,40 @@
+body {
+  margin: 0;
+  background: #111;
+  color: white;
+  font-family: 'Segoe UI', sans-serif;
+  text-align: center;
+  overflow: hidden;
+}
+
+h1 {
+  position: absolute;
+  top: 10px;
+  width: 100%;
+  font-size: 1.5em;
+  text-shadow: 0 0 10px #00ffcc;
+  z-index: 10;
+}
+
+#container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+video, canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: scaleX(-1); /* espejo */
+}
+
+#three_container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
